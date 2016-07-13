@@ -5,7 +5,7 @@ import android.support.annotation.NonNull;
 
 import java.util.Calendar;
 
-public class WatchUtility {
+public class WatchFaceUtility {
 
     /**
      * Method provided by Udacity Sunshine APp

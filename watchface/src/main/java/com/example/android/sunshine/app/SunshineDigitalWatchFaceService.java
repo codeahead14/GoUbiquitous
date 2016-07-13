@@ -82,11 +82,11 @@ public class SunshineDigitalWatchFaceService extends CanvasWatchFaceService {
     private static final int MSG_UPDATE_TIME = 0;
 
     @Override
-    public Engine onCreateEngine() {
-        return new Engine();
+    public WatchFaceEngine onCreateEngine() {
+        return new WatchFaceEngine();
     }
 
-    private class Engine extends CanvasWatchFaceService.Engine implements DataApi.DataListener,
+    private class WatchFaceEngine extends CanvasWatchFaceService.Engine implements DataApi.DataListener,
             GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
 
         private static final String WEATHER_PATH = "/weather";
@@ -228,6 +228,27 @@ public class SunshineDigitalWatchFaceService extends CanvasWatchFaceService {
         }
 
         @Override
+        public void onAmbientModeChanged(boolean inAmbientMode) {
+            super.onAmbientModeChanged(inAmbientMode);
+            if (mAmbient != inAmbientMode) {
+                mAmbient = inAmbientMode;
+                if (mLowBitAmbient) {
+                    mTextTimePaint.setAntiAlias(!inAmbientMode);
+                    mTextDatePaint.setAntiAlias(!inAmbientMode);
+                    mTextDateAmbientPaint.setAntiAlias(!inAmbientMode);
+                    mTextTempHighPaint.setAntiAlias(!inAmbientMode);
+                    mTextTempLowAmbientPaint.setAntiAlias(!inAmbientMode);
+                    mTextTempLowPaint.setAntiAlias(!inAmbientMode);
+                }
+                invalidate();
+            }
+
+            // Whether the timer should be running depends on whether we're visible (as well as
+            // whether we're in ambient mode), so we may need to start or stop the timer.
+            updateTimer();
+        }
+
+        @Override
         public void onApplyWindowInsets(WindowInsets insets) {
             super.onApplyWindowInsets(insets);
 
@@ -271,27 +292,6 @@ public class SunshineDigitalWatchFaceService extends CanvasWatchFaceService {
         }
 
         @Override
-        public void onAmbientModeChanged(boolean inAmbientMode) {
-            super.onAmbientModeChanged(inAmbientMode);
-            if (mAmbient != inAmbientMode) {
-                mAmbient = inAmbientMode;
-                if (mLowBitAmbient) {
-                    mTextTimePaint.setAntiAlias(!inAmbientMode);
-                    mTextDatePaint.setAntiAlias(!inAmbientMode);
-                    mTextDateAmbientPaint.setAntiAlias(!inAmbientMode);
-                    mTextTempHighPaint.setAntiAlias(!inAmbientMode);
-                    mTextTempLowAmbientPaint.setAntiAlias(!inAmbientMode);
-                    mTextTempLowPaint.setAntiAlias(!inAmbientMode);
-                }
-                invalidate();
-            }
-
-            // Whether the timer should be running depends on whether we're visible (as well as
-            // whether we're in ambient mode), so we may need to start or stop the timer.
-            updateTimer();
-        }
-
-        @Override
         public void onDraw(Canvas canvas, Rect bounds) {
             // Draw the background.
             if (mAmbient) {
@@ -322,7 +322,7 @@ public class SunshineDigitalWatchFaceService extends CanvasWatchFaceService {
             }
 
             String secondsText = String.format("%02d", second);
-            String amPmText = WatchUtility.getAmPmString(getResources(), am_pm);
+            String amPmText = WatchFaceUtility.getAmPmString(getResources(), am_pm);
             float timeTextLen = mTextTimePaint.measureText(timeText);
             float xOffsetTime = timeTextLen / 2;
             if (mAmbient) {
@@ -348,8 +348,8 @@ public class SunshineDigitalWatchFaceService extends CanvasWatchFaceService {
             Resources resources = getResources();
 
             // Draw the date
-            String dayOfWeekString   = WatchUtility.getDayOfWeekString(resources, mCalendar.get(Calendar.DAY_OF_WEEK));
-            String monthOfYearString = WatchUtility.getMonthOfYearString(resources, mCalendar.get(Calendar.MONTH));
+            String dayOfWeekString   = WatchFaceUtility.getDayOfWeekString(resources, mCalendar.get(Calendar.DAY_OF_WEEK));
+            String monthOfYearString = WatchFaceUtility.getMonthOfYearString(resources, mCalendar.get(Calendar.MONTH));
 
             int dayOfMonth = mCalendar.get(Calendar.DAY_OF_MONTH);
             int year = mCalendar.get(Calendar.YEAR);
@@ -412,18 +412,7 @@ public class SunshineDigitalWatchFaceService extends CanvasWatchFaceService {
             }
         }
 
-        @Override
-        public void onConnected(Bundle bundle) {
-            Wearable.DataApi.addListener(mGoogleApiClient, Engine.this);
-
-            requestWeatherInfo();
-        }
-
-        @Override
-        public void onConnectionSuspended(int i) {
-
-        }
-
+        /* Listening for Data Change events in device */
         @Override
         public void onDataChanged(DataEventBuffer dataEvents) {
             for (DataEvent dataEvent : dataEvents) {
@@ -444,7 +433,7 @@ public class SunshineDigitalWatchFaceService extends CanvasWatchFaceService {
 
                         if (dataMap.containsKey(KEY_WEATHER_ID)) {
                             int weatherId = dataMap.getInt(KEY_WEATHER_ID);
-                            Drawable b = getResources().getDrawable(WatchUtility.getIconResourceForWeatherCondition(weatherId));
+                            Drawable b = getResources().getDrawable(WatchFaceUtility.getIconResourceForWeatherCondition(weatherId));
                             Bitmap icon = ((BitmapDrawable) b).getBitmap();
                             float scaledWidth = (mTextTempHighPaint.getTextSize() / icon.getHeight()) * icon.getWidth();
                             mWeatherIcon = Bitmap.createScaledBitmap(icon, (int) scaledWidth, (int) mTextTempHighPaint.getTextSize(), true);
@@ -456,6 +445,18 @@ public class SunshineDigitalWatchFaceService extends CanvasWatchFaceService {
                     }
                 }
             }
+        }
+
+        @Override
+        public void onConnected(Bundle bundle) {
+            Wearable.DataApi.addListener(mGoogleApiClient, WatchFaceEngine.this);
+
+            requestWeatherInfo();
+        }
+
+        @Override
+        public void onConnectionSuspended(int i) {
+
         }
 
         @Override
@@ -481,15 +482,15 @@ public class SunshineDigitalWatchFaceService extends CanvasWatchFaceService {
     }
 
     private static class EngineHandler extends Handler {
-        private final WeakReference<SunshineDigitalWatchFaceService.Engine> mWeakReference;
+        private final WeakReference<WatchFaceEngine> mWeakReference;
 
-        public EngineHandler(SunshineDigitalWatchFaceService.Engine reference) {
+        public EngineHandler(WatchFaceEngine reference) {
             mWeakReference = new WeakReference<>(reference);
         }
 
         @Override
         public void handleMessage(Message msg) {
-            SunshineDigitalWatchFaceService.Engine engine = mWeakReference.get();
+            WatchFaceEngine engine = mWeakReference.get();
             if (engine != null) {
                 switch (msg.what) {
                     case MSG_UPDATE_TIME:
